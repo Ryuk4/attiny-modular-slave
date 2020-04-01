@@ -1,6 +1,8 @@
 // Code for the ATtiny85
 #include <EEPROM.h>
 #include <TinyWireS.h>
+
+byte byteRcvd;
 void initADC()
 {
   /* this function initialises the ADC 
@@ -79,7 +81,7 @@ namespace EEPROM_DATA {
 namespace COMMANDS {
   enum {
     assign_new_device_id    =     0xC1,
-    set_pwm_output          =     0xc2
+    set_pwm_output          =     0xC2
   };
   bool do_command(uint8_t cmd, uint16_t cmd_data) {
   
@@ -89,6 +91,7 @@ namespace COMMANDS {
         uint8_t new_device_id;
         new_device_id = uint8_t(cmd_data & 0x007F);                     //ensure the address is 7-bit.
         return EEPROM_DATA::store_device_id(new_device_id);             //return true of saved, false if invalid address.
+        USICR=0;
         TinyWireS.begin(new_device_id);
         break;
   
@@ -117,7 +120,7 @@ void setup()
     initADC();
     uint8_t _device_id = EEPROM_DATA::get_device_id();
     TinyWireS.begin(_device_id); // join i2c network
-    //TinyWireS.onReceive(receiveEvent); // not using this
+    TinyWireS.onReceive(receiveEvent); // not using this
     TinyWireS.onRequest(requestEvent);
  
     // Turn on LED when program starts
@@ -144,13 +147,43 @@ void receiveEvent(uint8_t byte_count)
     /*
      * Gets called when the ATtiny recieves an i2c message THAT CONTAINS DATA from another device.
      */
-    if (!TinyWireS.available() || byte_count != 3 ) return;             //qualify/validate call. first byte is command, next 2 bytes is data for command. Total must equal 3 bytes.
+    /*if (!TinyWireS.available() || byte_count != 3 ) return;             //qualify/validate call. first byte is command, next 2 bytes is data for command. Total must equal 3 bytes.
   
     //retrieve the command and 16-bit data. Incomming data is ordered CMD,Data-MSB,Data-LSB.
     uint8_t cmd = TinyWireS.receive();
     uint16_t cmd_data = (TinyWireS.receive() << 8);
     cmd_data += TinyWireS.receive();
-  
+    
+    uint8_t cmd_data = TinyWireS.receive();
     COMMANDS::do_command(cmd, cmd_data);
-  
+    */
+  if (TinyWireS.available()){           // si on revoit quelque chose sur le bus I2C
+    byteRcvd = TinyWireS.receive();     // on l'enregistre
+    //Blink(LED_PIN);// on blink un coup pour montrer que l'on est content
+    switch(byteRcvd){
+      case 0xC1:{
+        byteRcvd = TinyWireS.receive();
+        USICR=0;
+        TinyWireS.begin(byteRcvd);
+        break;
+      }
+      case 0x01:{
+        //digitalWrite(WATER_PIN, LOW);
+        break;
+      }
+      case 0x02:{
+        //digitalWrite(WATER_PIN, HIGH);
+        break;
+      }
+      case 0x10:{
+        //digitalWrite(ONOFF_READER, HIGH);
+        //val = analogRead(READER_PIN);
+        //TinyWireS.send(val);
+        //digitalWrite(ONOFF_READER, LOW);
+        break;
+      }
+      byteRcvd = 0;
+      _delay_ms(10);
+    }
+  }
 }
